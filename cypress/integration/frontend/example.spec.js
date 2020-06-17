@@ -1,35 +1,36 @@
-import Homepage from '../fixtures/pages/homepage';
+import Homepage from '../../pages/homepage';
 
-describe('Sign In', () => {
-  it('should show an error message on empty input', () => {
-    const home = new Homepage();
+describe('Example1 Tests', () => {
+  //Initialize homepage
+  const home = new Homepage();
+
+  it('should display Intro text on Homepage', () => {
+    //nav to homepage
     home.visit();
 
-    const signIn = home.goToSignIn();
+    // assert introduction text appears on homepage with contents
+    home.getIntroText()
+        .should('exist')
+        .contains('The purpose of this project is to provide a few examples')
 
-    signIn.submit();
-
-    signIn.getEmailError()
-      .should('exist')
-      .contains('Email is required');
-
-    signIn
-      .getPasswordError()
-      .should('exist')
-      .contains('Password is required');
   });
-  
-  it('should sign in with correct credentials', () => {
-    const home = new HomePage();
-    home.visit();
 
-    const signIn = home.goToSignIn();
+  it('should retreive Route List when button is clicked', () => {
 
-    signIn
-      .fillEmail('john@doe.com')
-      .fillPassword('123456')
-      .submit();
+    // Nav to example 1 using navbar
+    const example1 = home.goToExample1();
 
-    home.getUserAvatar().should('exist');
+    // Assert intro text is present on Example 1 page
+    example1.getHeaderText()
+        .should('exist')
+        .contains('Example 1:')
+
+    // Click button to retreive route list
+    example1.getRoutesList()
+
+    // Assert route is displayed in route list on page
+    example1.getRouteInList('Green-D')
+        .should('exist')
+        .contains('Destinations - Riverside,Government Center')
   });
 });

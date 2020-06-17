@@ -10,6 +10,6 @@
   "videosFolder": "cypress/results/assets/videos",
   "defaultCommandTimeout": 30000,
   "pageLoadTimeout": 30000,
-  "video": true,
+  "video": false,
   "waitForAnimations": true
 }
