@@ -1,0 +1,141 @@
+name: E2E testing
+
+on:
+  push:
+    branches:
+      - master
+      - staging
+      - develop
+  repository_dispatch:
+    types: trigger_external_test
+  schedule:
+    - cron: '0 2 * * *'
+
+env:
+  CYPRESS_CI: true
+  CYPRESS_RETRIES: 1
+  PROJECT_NAME: 'test'
+
+jobs:
+  # install:
+  #   runs-on: self-hosted
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v1
+  #     - name: Install yarn
+  #       run: yarn
+  e2e:
+    name: E2E testing
+    runs-on: ubuntu-latest
+    # runs-on: self-hosted
+    # needs: install
+    steps:
+      - name: Setup
+        id: setup
+        run: |
+          TODAY_DATE=`date +"%d.%m.%y"`
+          echo "::set-output name=DATE::$TODAY_DATE"
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          if [ "$BRANCH_NAME" == "develop" ]
+          then
+          echo "::set-output name=BRANCH_NAME::$BRANCH_NAME"
+          echo "::set-output name=PROJECT::$PROJECT_NAME/develop/$TODAY_DATE"
+          elif [ "$BRANCH_NAME" == "staging" ]
+          then
+          echo "::set-output name=BRANCH_NAME::$BRANCH_NAME"
+          echo "::set-output name=PROJECT::$PROJECT_NAME/staging/$TODAY_DATE"
+          elif [ "$BRANCH_NAME" == "master" ]
+          then
+          echo "::set-output name=BRANCH_NAME::$BRANCH_NAME"
+          echo "::set-output name=PROJECT::$PROJECT_NAME/production/$TODAY_DATE"
+          else
+          echo "::set-output name=BRANCH_NAME::test"
+          echo "::set-output name=PROJECT::$PROJECT_NAME/test/$TODAY_DATE"
+          fi
+      - name: Checkout code develop
+        if:
+          (steps.setup.outputs.BRANCH_NAME == 'develop' ||
+          steps.setup.outputs.BRANCH_NAME == 'test') && (github.event_name !=
+          'schedule')
+        uses: actions/checkout@v2
+        with:
+          ref: develop
+      - name: Checkout code staging
+        if:
+          steps.setup.outputs.BRANCH_NAME == 'staging' || (github.event_name ==
+          'schedule')
+        uses: actions/checkout@v2
+        with:
+          ref: staging
+      - name: Get directory yarn cache
+        id: yarn-cache
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - name: Get cache node_modules
+        uses: actions/cache@preview
+        id: cache
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Get cache yarn from directory
+        uses: actions/cache@v1
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - name: Install yarn
+        run: |
+          yarn
+          yarn cypress install
+      - name: E2E Testing Develop
+        if: steps.setup.outputs.BRANCH_NAME == 'develop'
+        run: yarn cypress:run -s 'cypress/integration/**/*.spec.js'
+      - name: E2E Testing Staging
+        if: steps.setup.outputs.BRANCH_NAME == 'staging'
+        run: yarn cypress:runStage -s 'cypress/integration/**/*.spec.js'
+      - name: Schedule staging
+        if: github.event_name == 'schedule'
+        run: |
+          echo "::set-output name=BRANCH_NAME::staging"
+          yarn cypress:runStage -s 'cypress/integration/**/*.spec.js'
+      - name: Generate report
+        if: success() || failure()
+        run: |
+          yarn --silent mochawesome-merge cypress/results/report/*.json > cypress/results/mochawesome.json
+          yarn --silent marge cypress/results/mochawesome.json -o cypress/results && rm -rf cypress/results/report
+          mv cypress/results/mochawesome.html cypress/results/index.html
+          mv cypress/results ${{steps.setup.outputs.DATE}}
+      # Deploy AWS S3
+      # - name: Upload report
+      #   if: success() || failure()
+      #   uses: actions/upload-artifact@v1
+      #   with:
+      #     name: report-${{steps.setup.outputs.BRANCH_NAME}}
+      #     path: ${{steps.setup.outputs.DATE}}
+      - name: Deploy AWS S3
+        if: success() || failure()
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --acl public-read --follow-symlinks
+        env:
+          AWS_S3_BUCKET: 'automated-tester/${{steps.setup.outputs.PROJECT}}'
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'ap-southeast-1'
+          SOURCE_DIR: './${{steps.setup.outputs.DATE}}'
+      - name: Send notification to slack
+        uses: 8398a7/action-slack@v2
+        if: success() || failure()
+        with:
+          status: ${{ job.status }}
+          author_name:
+            Tester report
+            ${{steps.setup.outputs.BRANCH_NAME}}-${{steps.setup.outputs.DATE}}
+          text:
+            'Can check report at:
+            http://automated-tester.s3-website-ap-southeast-1.amazonaws.com/${{steps.setup.outputs.PROJECT}}/index.html'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

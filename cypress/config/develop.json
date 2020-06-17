@@ -1,0 +1,6 @@
+{
+  "baseUrl": "https://www.google.co.th",
+  "env": {
+    "service": ":4000"
+  }
+}

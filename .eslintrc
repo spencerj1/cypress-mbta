@@ -1,0 +1,15 @@
+{
+  "plugins": ["cypress", "chai-friendly"],
+  "env": {
+    "cypress/globals": true
+  },
+  "extends": ["standard", "plugin:cypress/recommended", "prettier"],
+  "rules": {
+    "no-console": 1,
+    "no-unused-vars": 2,
+    "no-unused-expressions": 0,
+    "max-params": [2, 3],
+    "no-var": 2,
+    "chai-friendly/no-unused-expressions": 2
+  }
+}
